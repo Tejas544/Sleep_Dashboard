@@ -31,10 +31,10 @@ export default function DashboardPage() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-slate-900 leading-none">
-                NeuroSleep AI
+                InfoSys PRO AI
               </h1>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Clinical Staging & Diagnostics
+                Clinical Staging & Diagnostics 
               </p>
             </div>
           </div>
