@@ -1,6 +1,9 @@
 import Papa from 'papaparse';
 import { DashboardData, SleepEpoch, SleepAnomaly, SleepSummary, SleepStage } from '../types';
 
+const API_URL = "https://backend-isp-1.onrender.com"; 
+
+// --- HELPER FUNCTIONS ---
 function mapClinicalStageToUI(rawStage: string): SleepStage {
     const normalized = rawStage.toUpperCase().trim();
     if (normalized === 'N3' || normalized === 'DEEP') return 'Deep';
@@ -41,54 +44,66 @@ function detectAnomalies(epochs: SleepEpoch[]): SleepAnomaly[] {
     return anomalies;
 }
 
+// --- MAIN PIPELINE ---
 export const processCSVData = (file: File): Promise<DashboardData> => {
     return new Promise((resolve, reject) => {
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
             dynamicTyping: true,
-            complete: (results) => {
+            complete: async (results) => {
                 try {
                     const rawData = results.data as any[];
-                    
-                    // Base time to convert raw numeric timestamps into absolute dates
-                    // We assume the recording started at 10:00 PM for visualization
                     const baseTime = new Date('2023-10-27T22:00:00Z').getTime();
 
-                    const epochs: SleepEpoch[] = rawData.map((row) => {
-                        // 1. Handle flexible column headers (Professor's vs Standard)
+                    // 1. DEFENSIVE EXTRACTION: Handle NaNs to prevent Python crashes
+                    let heartRates = rawData.map(row => row.HR !== undefined ? Number(row.HR) : Number(row.heart_rate));
+                    heartRates = heartRates.map(hr => isNaN(hr) ? 60.0 : hr);
+
+                    if (heartRates.length === 0) {
+                        throw new Error("No heart rate data found in CSV.");
+                    }
+
+                    // 2. Execute API Call
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ heart_rate: heartRates })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(`API Inference Failed: ${errorData.detail || response.statusText}`);
+                    }
+
+                    const apiData = await response.json();
+                    const predictedStages = apiData.stages;
+
+                    if (predictedStages.length !== rawData.length) {
+                        throw new Error("Mismatch between CSV rows and API prediction output length.");
+                    }
+
+                    // 3. Construct Epochs
+                    const epochs: SleepEpoch[] = rawData.map((row, index) => {
                         const rawTime = row.TIMESTAMP !== undefined ? row.TIMESTAMP : row.timestamp;
-                        const hr = row.HR !== undefined ? row.HR : row.heart_rate;
                         
-                        // Create a valid ISO timestamp. 
-                        // Assuming rawTime is elapsed seconds or minutes. Let's treat it as minutes.
-                        const timeOffsetMs = Number(rawTime) * 60 * 1000;
+                        // FIX: Assuming TIMESTAMP is in seconds. Convert to milliseconds.
+                        const timeOffsetMs = Number(rawTime) * 1000; 
                         const validTimestamp = new Date(baseTime + timeOffsetMs).toISOString();
 
-                        // 2. MOCK THE ML MODEL
-                        // If stage is missing, guess it based on heart rate to test the UI
-                        let predictedStage = 'Light';
-                        if (row.stage) {
-                            predictedStage = row.stage;
-                        } else {
-                            if (hr > 80) predictedStage = 'Wake';
-                            else if (hr < 70) predictedStage = 'Deep';
-                            else if (hr > 75) predictedStage = 'REM';
-                        }
-
-                        // Mock respiration if missing (baseline 15 +- slight variation)
                         const resp = row.respiration !== undefined ? row.respiration : (14 + Math.random() * 3);
 
                         return {
                             timestamp: validTimestamp,
-                            heartRate: Number(hr),
+                            heartRate: heartRates[index],
                             respiration: Number(resp),
-                            stage: mapClinicalStageToUI(predictedStage) 
+                            stage: mapClinicalStageToUI(predictedStages[index])
                         };
                     });
 
-                    // Standard 30-second epoch math (0.5 mins)
-                    const epochDurationMinutes = 0.5; 
+                    // 4. Calculate Summaries based on 20Hz Frequency
+                    // 1 row = 1/20th of a second. Convert to minutes.
+                    const epochDurationMinutes = 1 / 1200; 
                     let deepMin = 0, remMin = 0, lightMin = 0, awakeMin = 0;
 
                     epochs.forEach(e => {
@@ -110,14 +125,15 @@ export const processCSVData = (file: File): Promise<DashboardData> => {
                     const anomalies = detectAnomalies(epochs);
 
                     resolve({
-                        patientId: "PROF-TEST-001", 
+                        patientId: "LIVE-PATIENT-001", 
                         recordingDate: epochs.length > 0 ? epochs[0].timestamp : new Date().toISOString(),
                         summary,
                         timeseries: epochs,
                         anomalies
                     });
                 } catch (error) {
-                    reject(new Error("Data transformation failed. Could not process TIMESTAMP or HR columns."));
+                    console.error(error);
+                    reject(error);
                 }
             },
             error: (error) => reject(error)

@@ -7,6 +7,7 @@ import Hypnogram from '../components/Hypnogram';
 import SignalCharts from '../components/SignalCharts';
 import SleepArchitecture from '../components/SleepArchitecture';
 import AnomalyLog from '../components/AnomalyLog';
+import Recommendations from '../components/Recommendations'; // <-- NEW IMPORT
 import { Moon, Clock, BrainCircuit, Activity, RefreshCw } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -39,7 +40,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Reset Button (Only shows if data is loaded) */}
+          {/* Reset Button */}
           {data && (
             <button
               onClick={() => setData(null)}
@@ -118,6 +119,11 @@ export default function DashboardPage() {
                  <AnomalyLog anomalies={data.anomalies} />
                </div>
 
+            </div>
+
+            {/* AI RECOMMENDATIONS ROW (Full Width) */}
+            <div className="w-full mt-6">
+                <Recommendations summary={data.summary} anomalies={data.anomalies} />
             </div>
             
             {/* FOOTER METADATA */}
