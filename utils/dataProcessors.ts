@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 import { DashboardData, SleepEpoch, SleepAnomaly, SleepSummary, SleepStage } from '../types';
 
-const API_URL = "https://backend-isp-1.onrender.com"; 
+const API_URL = "https://backend-isp-1.onrender.com/predict"; 
 
 // --- HELPER FUNCTIONS ---
 function mapClinicalStageToUI(rawStage: string): SleepStage {
