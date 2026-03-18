@@ -12,7 +12,7 @@ const handler = NextAuth({
       async authorize(credentials) {
         // For Demo: Any user with password 'admin123' can log in
         if (credentials?.email && credentials?.password === "admin123") {
-          return { id: "1", name: "Tejas", email: credentials.email };
+          return { id: "1", name: "User", email: credentials.email };
         }
         return null;
       }
