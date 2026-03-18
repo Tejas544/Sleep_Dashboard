@@ -1,19 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { DashboardData } from '../types';
 import FileUpload from '../components/FileUpload';
 import Hypnogram from '../components/Hypnogram';
 import SignalCharts from '../components/SignalCharts';
 import SleepArchitecture from '../components/SleepArchitecture';
 import AnomalyLog from '../components/AnomalyLog';
-import Recommendations from '../components/Recommendations'; // <-- NEW IMPORT
-import { Moon, Clock, BrainCircuit, Activity, RefreshCw } from 'lucide-react';
+import Recommendations from '../components/Recommendations';
+import { Moon, Clock, BrainCircuit, Activity, RefreshCw, LogOut, CreditCard } from 'lucide-react';
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
 
-  // Helper to format decimal minutes into Hours and Minutes
+  // AUTH GUARD: If not logged in, boot to login page
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  if (status === 'loading') return null; // Prevent flicker
+
   const formatTime = (minutes: number) => {
     const hrs = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
@@ -40,98 +52,80 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Reset Button */}
-          {data && (
+          {/* AUTH & ACTIONS */}
+          <div className="flex items-center gap-3">
+            {data && (
+              <button
+                onClick={() => setData(null)}
+                className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+              >
+                <RefreshCw className="w-4 h-4" /> New Patient
+              </button>
+            )}
+
             <button
-              onClick={() => setData(null)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+              onClick={() => router.push('/pricing')}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
             >
-              <RefreshCw className="w-4 h-4" />
-              New Patient
+              <CreditCard className="w-4 h-4" /> Pricing
             </button>
-          )}
+
+            <button
+              onClick={() => signOut()}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-all"
+            >
+              <LogOut className="w-4 h-4" /> Logout
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 mt-8">
-        
-        {/* STATE 1: UPLOAD SCREEN */}
         {!data ? (
           <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in fade-in duration-700">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">
-                Upload Sensor Data
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">
+                Welcome back, {session?.user?.name}
               </h2>
               <p className="text-slate-500">
-                Process raw time-series CSVs into clinical sleep staging and anomaly reports.
+                Upload patient sensor data to generate Clinical Analysis.
               </p>
             </div>
             <FileUpload onDataLoaded={setData} />
           </div>
         ) : (
-          
-          /* STATE 2: DASHBOARD SCREEN */
           <div className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-700">
             
             {/* KPI METRICS ROW */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard 
-                title="Total Sleep Time" 
-                value={formatTime(data.summary.totalSleepMinutes)} 
-                icon={<Clock className="w-5 h-5 text-blue-500" />} 
-              />
-              <KpiCard 
-                title="Deep Sleep" 
-                value={`${Math.round((data.summary.deepSleepMinutes / data.summary.totalSleepMinutes) * 100 || 0)}%`} 
-                subtext={formatTime(data.summary.deepSleepMinutes)}
-                icon={<Activity className="w-5 h-5 text-emerald-500" />} 
-              />
-              <KpiCard 
-                title="REM Sleep" 
-                value={`${Math.round((data.summary.remSleepMinutes / data.summary.totalSleepMinutes) * 100 || 0)}%`} 
-                subtext={formatTime(data.summary.remSleepMinutes)}
-                icon={<BrainCircuit className="w-5 h-5 text-purple-500" />} 
-              />
-              <KpiCard 
-                title="Clinical Score" 
-                value={data.summary.overallScore.toString()} 
-                subtext="/ 100"
-                icon={<Moon className="w-5 h-5 text-amber-500" />} 
-              />
+              <KpiCard title="Total Sleep Time" value={formatTime(data.summary.totalSleepMinutes)} icon={<Clock className="w-5 h-5 text-blue-500" />} />
+              <KpiCard title="Deep Sleep" value={`${Math.round((data.summary.deepSleepMinutes / data.summary.totalSleepMinutes) * 100 || 0)}%`} subtext={formatTime(data.summary.deepSleepMinutes)} icon={<Activity className="w-5 h-5 text-emerald-500" />} />
+              <KpiCard title="REM Sleep" value={`${Math.round((data.summary.remSleepMinutes / data.summary.totalSleepMinutes) * 100 || 0)}%`} subtext={formatTime(data.summary.remSleepMinutes)} icon={<BrainCircuit className="w-5 h-5 text-purple-500" />} />
+              <KpiCard title="Clinical Score" value={data.summary.overallScore.toString()} subtext="/ 100" icon={<Moon className="w-5 h-5 text-amber-500" />} />
             </div>
 
-            {/* MAIN CHART ROW (HYPNOGRAM) */}
             <div className="w-full">
                <Hypnogram data={data.timeseries} />
             </div>
 
-            {/* SPLIT ROW: SIGNALS & DIAGNOSTICS */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-               
-               {/* Left Column: Takes up 2/3 of the space on desktop */}
                <div className="lg:col-span-2 space-y-6">
                  <SignalCharts data={data.timeseries} />
                </div>
-
-               {/* Right Column: Takes up 1/3 of the space on desktop */}
                <div className="lg:col-span-1 space-y-6">
                  <SleepArchitecture summary={data.summary} />
                  <AnomalyLog anomalies={data.anomalies} />
                </div>
-
             </div>
 
-            {/* AI RECOMMENDATIONS ROW (Full Width) */}
             <div className="w-full mt-6">
                 <Recommendations summary={data.summary} anomalies={data.anomalies} />
             </div>
             
-            {/* FOOTER METADATA */}
             <div className="flex justify-between items-center text-xs text-slate-400 mt-8 pt-4 border-t border-slate-200">
               <p>Patient ID: <span className="font-mono font-bold text-slate-500">{data.patientId}</span></p>
-              <p>Analyzed: {new Date().toLocaleString()}</p>
+              <p>Practitioner: <span className="text-blue-600 font-bold">{session?.user?.email}</span></p>
             </div>
-
           </div>
         )}
       </div>
@@ -139,10 +133,7 @@ export default function DashboardPage() {
   );
 }
 
-// ----------------------------------------------------------------------
-// Micro-Component: KPI Card for the top row
-// ----------------------------------------------------------------------
-function KpiCard({ title, value, subtext, icon }: { title: string, value: string | number, subtext?: string, icon: React.ReactNode }) {
+function KpiCard({ title, value, subtext, icon }: any) {
   return (
     <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
       <div>
@@ -152,9 +143,7 @@ function KpiCard({ title, value, subtext, icon }: { title: string, value: string
           {subtext && <span className="text-xs font-bold text-slate-400">{subtext}</span>}
         </div>
       </div>
-      <div className="bg-slate-50 p-3 rounded-full">
-        {icon}
-      </div>
+      <div className="bg-slate-50 p-3 rounded-full">{icon}</div>
     </div>
   );
 }
