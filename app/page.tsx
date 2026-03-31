@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useAuthStore } from '../store/authStore';
 import { useRouter } from 'next/navigation';
 import { DashboardData } from '../types';
 import FileUpload from '../components/FileUpload';
@@ -13,18 +13,34 @@ import Recommendations from '../components/Recommendations';
 import { Moon, Clock, BrainCircuit, Activity, RefreshCw, LogOut, CreditCard } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
+  
+  // 1. Extract pure state from Zustand
+  const { token, practitioner, logout } = useAuthStore();
+  
   const [data, setData] = useState<DashboardData | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // AUTH GUARD: If not logged in, boot to login page
+  // 2. Hydration Guard
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    setIsMounted(true);
+  }, []);
+
+  // 3. Strict Auth Guard
+  useEffect(() => {
+    if (isMounted && !token) {
       router.push('/login');
     }
-  }, [status, router]);
+  }, [isMounted, token, router]);
 
-  if (status === 'loading') return null; // Prevent flicker
+  // Prevent UI flash before redirect
+  if (!isMounted || !token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-medium">
+        Loading secure environment...
+      </div>
+    );
+  }
 
   const formatTime = (minutes: number) => {
     const hrs = Math.floor(minutes / 60);
@@ -70,8 +86,12 @@ export default function DashboardPage() {
               <CreditCard className="w-4 h-4" /> Pricing
             </button>
 
+            {/* Re-wired Logout Button */}
             <button
-              onClick={() => signOut()}
+              onClick={() => {
+                logout();
+                router.push('/login');
+              }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-all"
             >
               <LogOut className="w-4 h-4" /> Logout
@@ -84,8 +104,9 @@ export default function DashboardPage() {
         {!data ? (
           <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in fade-in duration-700">
             <div className="text-center mb-8">
+              {/* Re-wired Practitioner Name */}
               <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">
-                Welcome back, {session?.user?.name}
+                Welcome back, {practitioner?.fullName}
               </h2>
               <p className="text-slate-500">
                 Upload patient sensor data to generate Clinical Analysis.
@@ -124,7 +145,8 @@ export default function DashboardPage() {
             
             <div className="flex justify-between items-center text-xs text-slate-400 mt-8 pt-4 border-t border-slate-200">
               <p>Patient ID: <span className="font-mono font-bold text-slate-500">{data.patientId}</span></p>
-              <p>Practitioner: <span className="text-blue-600 font-bold">{session?.user?.email}</span></p>
+              {/* Re-wired Practitioner Email */}
+              <p>Practitioner: <span className="text-blue-600 font-bold">{practitioner?.email}</span></p>
             </div>
           </div>
         )}

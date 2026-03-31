@@ -1,6 +1,6 @@
 import './globals.css';
 import Script from 'next/script';
-import { Providers } from './providers'; // We will create this next
+//import { Providers } from './providers'; // We will create this next
 
 export const metadata = {
   title: 'InfoSys PRO AI | Clinical Sleep Staging',
@@ -18,9 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="antialiased">
-        <Providers>
           {children}
-        </Providers>
       </body>
     </html>
   );
