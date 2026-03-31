@@ -2,7 +2,8 @@
 
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileType, AlertCircle, Loader2 } from 'lucide-react';
-import { processCSVData } from '../utils/dataProcessors';
+// Replaced local data processor with the new API service
+import { uploadCsvForAnalysis } from '../lib/axios'; // Adjust path if your axios.ts is elsewhere
 import { DashboardData } from '../types';
 
 interface FileUploadProps {
@@ -25,14 +26,18 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
             return;
         }
 
-        // 2. Async Processing Trigger
+        // 2. Async Processing Trigger (Hitting the ML Backend)
         setIsLoading(true);
         try {
-            const parsedData = await processCSVData(file);
-            // 3. Hand off to parent component
-            onDataLoaded(parsedData);
+            const mlResult = await uploadCsvForAnalysis(file);
+            
+            // 3. Hand off the ML data to parent component
+            // Note: Ensure your `DashboardData` type in '../types' is updated to match 
+            // the { metrics: {...}, timeseries: [...] } format coming from Python.
+            onDataLoaded(mlResult);
+            
         } catch (err: any) {
-            setError(err.message || 'Data pipeline failure. Ensure the CSV matches the required schema.');
+            setError(err.message || 'Data pipeline failure. Ensure the CSV contains an HR column.');
         } finally {
             setIsLoading(false);
             // Reset input so the same file can be uploaded again if needed
@@ -83,7 +88,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                 {isLoading ? (
                     <div className="flex flex-col items-center text-blue-600">
                         <Loader2 className="w-12 h-12 mb-4 animate-spin" />
-                        <p className="text-sm font-semibold">Processing Sleep Epochs...</p>
+                        <p className="text-sm font-semibold">Running ML Inference...</p>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center text-gray-500">
@@ -92,7 +97,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                             Click to upload or drag and drop
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1">
-                            <FileType className="w-3 h-3" /> CSV files only (timestamp, heart_rate, respiration, stage)
+                            <FileType className="w-3 h-3" /> Heart Rate CSV files only
                         </p>
                     </div>
                 )}

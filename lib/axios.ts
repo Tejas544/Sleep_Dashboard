@@ -51,4 +51,27 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * NEW: ML Pipeline Integration
+ * Sends the CSV file to the Node.js -> Python backend for analysis.
+ */
+export const uploadCsvForAnalysis = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file); // 'file' MUST match the backend Multer configuration
+
+  try {
+    const response = await api.post('/upload', formData, {
+      headers: {
+        // Override the default application/json for this specific request
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data.data; // Returns { success, metrics, timeseries }
+  } catch (error: any) {
+    console.error('[AXIOS] ML Upload failed:', error);
+    // Extract the exact error message thrown by the Python script via Node
+    throw new Error(error.response?.data?.error || 'Failed to analyze CSV. Please try again.');
+  }
+};
+
 export default api;

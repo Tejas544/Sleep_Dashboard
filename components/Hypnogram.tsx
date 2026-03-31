@@ -1,45 +1,68 @@
 'use client';
-
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { SleepEpoch } from '../types';
 import { Loader2 } from 'lucide-react';
 
-// Crucial: Dynamically import Plotly to prevent Next.js Server-Side Rendering crashes
 const Plot = dynamic(() => import('react-plotly.js'), { 
     ssr: false,
     loading: () => (
-        <div className="w-full h-full flex items-center justify-center bg-gray-50 rounded-xl">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <div className="flex items-center justify-center w-full h-full bg-gray-50 rounded-xl">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
         </div>
     )
 });
 
 interface HypnogramProps {
-    data: SleepEpoch[];
+    timeseries: number[];
 }
 
-// Map text stages to numeric values so Plotly can draw them on a Y-axis
-const STAGE_MAP: Record<string, number> = {
-    'Deep': 0,
-    'Light': 1,
-    'REM': 2,
-    'Wake': 3
+// Map the Python output integers to clinical labels
+const STAGE_LABELS: Record<number, string> = {
+    0: 'Wake',
+    1: 'N1 (Light)',
+    2: 'N2 (Light)',
+    3: 'N3 (Deep)',
+    4: 'REM',
+    5: 'Movement',
+    6: 'Unscored'
 };
 
-export default function Hypnogram({ data }: HypnogramProps) {
-    if (!data || data.length === 0) return null;
+export default function Hypnogram({ timeseries }: HypnogramProps) {
+    if (!timeseries || timeseries.length === 0) return null;
 
-    // Extract arrays for X (time) and Y (numeric stage) axes
-    const timestamps = data.map(d => d.timestamp);
-    const yValues = data.map(d => STAGE_MAP[d.stage]);
-    const hoverTexts = data.map(d => `Time: ${new Date(d.timestamp).toLocaleTimeString()}<br>Stage: <b>${d.stage}</b>`);
+    // Generate pseudo-timestamps (each window is 32 seconds)
+    // Starting from a generic 10:00 PM
+    const startTime = new Date();
+    startTime.setHours(22, 0, 0, 0);
+
+    const timestamps = timeseries.map((_, i) => {
+        const t = new Date(startTime.getTime());
+        t.setSeconds(t.getSeconds() + (i * 32));
+        return t;
+    });
+
+    // In a clinical hypnogram, Wake is at the top, Deep sleep is at the bottom.
+    // We reverse the Y-axis mapping to achieve this visual drop.
+    const Y_MAPPING: Record<number, number> = {
+        0: 4, // Wake (Top)
+        4: 3, // REM
+        1: 2, // N1
+        2: 2, // N2
+        3: 1, // N3 (Bottom)
+        5: 4, // Movement (treat as Wake visually)
+        6: 4  // Unscored
+    };
+
+    const yValues = timeseries.map(stage => Y_MAPPING[stage]);
+    const hoverTexts = timeseries.map((stage, i) => 
+        `Time: ${timestamps[i].toLocaleTimeString()}<br>Stage: <b>${STAGE_LABELS[stage]}</b>`
+    );
 
     return (
-        <div className="w-full h-80 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div className="w-full p-4 bg-white border border-gray-200 shadow-sm h-80 rounded-xl">
             <div className="mb-2">
-                <h3 className="text-lg font-black text-gray-900 tracking-tight">Sleep Architecture (Hypnogram)</h3>
-                <p className="text-xs text-gray-500 font-medium">Progression of sleep cycles over time.</p>
+                <h3 className="text-lg font-black tracking-tight text-gray-900">Sleep Architecture (Hypnogram)</h3>
+                <p className="text-xs font-medium text-gray-500">Progression of sleep cycles based on ML inference.</p>
             </div>
             
             <div className="w-full h-[calc(100%-3rem)]">
@@ -50,46 +73,42 @@ export default function Hypnogram({ data }: HypnogramProps) {
                             y: yValues,
                             type: 'scatter',
                             mode: 'lines',
-                            line: { 
-                                shape: 'hv', // 'hv' = horizontal then vertical (creates the step effect)
-                                color: '#3b82f6', 
-                                width: 2 
-                            }, 
+                            line: { shape: 'hv', color: '#3b82f6', width: 2 }, 
                             fill: 'tozeroy',
                             fillcolor: 'rgba(59, 130, 246, 0.1)',
                             name: 'Sleep Stage',
                             hoverinfo: 'text',
-                            text: hoverTexts // Replaces the raw 0,1,2,3 with readable text on hover
+                            text: hoverTexts
                         }
                     ]}
                     layout={{
                         autosize: true,
                         margin: { l: 50, r: 20, t: 10, b: 40 },
                         hoverlabel: {
-                            bgcolor: '#ffffff',     // Solid white background
-                            bordercolor: '#e5e7eb', // Light gray border
+                            bgcolor: '#ffffff',
+                            bordercolor: '#e5e7eb',
                             font: { color: '#1f2937', size: 12, family: 'sans-serif' },
                             align: 'left'
                         },
                         yaxis: {
-                            tickvals: [0, 1, 2, 3],
-                            ticktext: ['Deep', 'Light', 'REM', 'Wake'],
-                            fixedrange: true, // Lock Y-axis zooming so the stages don't stretch weirdly
+                            tickvals: [1, 2, 3, 4],
+                            ticktext: ['Deep (N3)', 'Light (N1/N2)', 'REM', 'Wake'],
+                            fixedrange: true,
                             zeroline: false,
                             gridcolor: '#f3f4f6'
                         },
                         xaxis: {
                             type: 'date',
                             gridcolor: '#f3f4f6',
-                            tickformat: '%H:%M' // Show hours:minutes
+                            tickformat: '%H:%M'
                         },
                         paper_bgcolor: 'transparent',
                         plot_bgcolor: 'transparent',
-                        hovermode: 'x unified' // Shows a vertical line connecting all data points at a timestamp
+                        hovermode: 'x unified'
                     }}
                     useResizeHandler={true}
                     style={{ width: '100%', height: '100%' }}
-                    config={{ displayModeBar: false }} // Hides the clunky Plotly toolbar
+                    config={{ displayModeBar: false }}
                 />
             </div>
         </div>

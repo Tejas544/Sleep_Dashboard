@@ -34,9 +34,14 @@ export interface SleepSummary {
 
 // The complete payload that drives the entire dashboard
 export interface DashboardData {
-  patientId: string;
-  recordingDate: string;
-  summary: SleepSummary;
-  timeseries: SleepEpoch[];
-  anomalies: SleepAnomaly[];
+  success: boolean;
+  metrics: {
+    durationScore: number;
+    efficiencyScore: number;
+    deepSleepScore: number;
+    remSleepScore: number;
+    hrvScore: number;
+    overallScore: number;
+  };
+  timeseries: number[];
 }
