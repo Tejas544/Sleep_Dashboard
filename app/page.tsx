@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useSleepStore } from '../store/sleepStore';
 import { useRouter } from 'next/navigation';
-import { DashboardData } from '../types';
 import FileUpload from '../components/FileUpload';
 import Hypnogram from '../components/Hypnogram';
 import SleepArchitecture from '../components/SleepArchitecture';
@@ -16,18 +16,20 @@ import { Moon, BrainCircuit, Activity, RefreshCw, LogOut, CreditCard, ShieldChec
 export default function DashboardPage() {
   const router = useRouter();
   
-  // 1. Extract pure state from Zustand
+  // 1. Extract Auth State
   const { token, practitioner, logout } = useAuthStore();
   
-  const [data, setData] = useState<DashboardData | null>(null);
+  // 2. Extract Global Sleep ML State
+  const { metrics, timeseries, isAnalyzing } = useSleepStore();
+
   const [isMounted, setIsMounted] = useState(false);
 
-  // 2. Hydration Guard
+  // 3. Hydration Guard
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // 3. Strict Auth Guard
+  // 4. Strict Auth Guard
   useEffect(() => {
     if (isMounted && !token) {
       router.push('/login');
@@ -65,10 +67,10 @@ export default function DashboardPage() {
 
           {/* AUTH & ACTIONS */}
           <div className="flex items-center gap-3">
-            {data && (
+            {metrics && timeseries && (
               <button
-                onClick={() => setData(null)}
-                className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
+                onClick={() => useSleepStore.setState({ metrics: null, timeseries: null })}
+                className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition"
               >
                 <RefreshCw className="w-4 h-4" /> New Patient
               </button>
@@ -76,15 +78,15 @@ export default function DashboardPage() {
 
             <button
               onClick={() => router.push('/pricing')}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
             >
               <CreditCard className="w-4 h-4" /> Pricing
             </button>
 
-            {/* Re-wired Logout Button */}
             <button
               onClick={() => {
                 logout();
+                useSleepStore.setState({ metrics: null, timeseries: null }); // Clear patient data on logout
                 router.push('/login');
               }}
               className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white transition-all rounded-lg bg-slate-900 hover:bg-slate-800"
@@ -96,44 +98,50 @@ export default function DashboardPage() {
       </header>
 
       <div className="px-6 mx-auto mt-8 max-w-7xl">
-        {!data ? (
+        {/* If no timeseries data exists, show the Upload View */}
+        {!timeseries || !metrics ? (
           <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in fade-in duration-700">
-            <div className="mb-8 text-center">
-              <h2 className="mb-2 text-3xl font-black tracking-tight uppercase text-slate-900">
-                Welcome back, {practitioner?.fullName}
-              </h2>
-              <p className="text-slate-500">
-                Upload patient heart rate data to generate an AI Clinical Analysis.
-              </p>
-            </div>
-            <FileUpload onDataLoaded={setData} />
+            {/* Hide welcome text while analyzing to focus on the loading spinner */}
+            {!isAnalyzing && (
+              <div className="mb-8 text-center">
+                <h2 className="mb-2 text-3xl font-black tracking-tight uppercase text-slate-900">
+                  Welcome back, {practitioner?.fullName}
+                </h2>
+                <p className="text-slate-500">
+                  Upload raw patient radar data to generate an AI Clinical Analysis.
+                </p>
+              </div>
+            )}
+            
+            {/* FileUpload handles its own internal drag-and-drop & loading UI now */}
+            <FileUpload />
           </div>
         ) : (
+          /* If data exists, show the Dashboard View */
           <div className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-700">
             
-            {/* KPI METRICS ROW: Updated to read from data.metrics */}
+            {/* KPI METRICS ROW: Pulled directly from Zustand metrics state */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <KpiCard title="Overall Clinical Score" value={Math.min(100,data.metrics.overallScore)} subtext="/ 100" icon={<Moon className="w-5 h-5 text-amber-500" />} />
-              <KpiCard title="Sleep Efficiency" value={`${Math.min(100,data.metrics.efficiencyScore)}%`} icon={<Activity className="w-5 h-5 text-blue-500" />} />
-              <KpiCard title="Deep Sleep Score" value={`${Math.min(100,data.metrics.deepSleepScore)}%`} icon={<ShieldCheck className="w-5 h-5 text-emerald-500" />} />
-              <KpiCard title="REM Sleep Score" value={`${Math.min(100,data.metrics.remSleepScore)}%`} icon={<BrainCircuit className="w-5 h-5 text-purple-500" />} />
+              <KpiCard title="Overall Clinical Score" value={Math.min(100, metrics.overallScore)} subtext="/ 100" icon={<Moon className="w-5 h-5 text-amber-500" />} />
+              <KpiCard title="Sleep Efficiency" value={`${Math.min(100, metrics.efficiencyScore)}%`} icon={<Activity className="w-5 h-5 text-blue-500" />} />
+              <KpiCard title="Deep Sleep Score" value={`${Math.min(100, metrics.deepSleepScore)}%`} icon={<ShieldCheck className="w-5 h-5 text-emerald-500" />} />
+              <KpiCard title="REM Sleep Score" value={`${Math.min(100, metrics.remSleepScore)}%`} icon={<BrainCircuit className="w-5 h-5 text-purple-500" />} />
             </div>
 
-            {/* HYPNOGRAM: Now accepts the timeseries integer array */}
+            {/* HYPNOGRAM: Passed directly from Zustand timeseries state */}
             <div className="w-full">
-               <Hypnogram timeseries={data.timeseries} />
+               <Hypnogram timeseries={timeseries} />
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                {/* SignalCharts disabled until Python returns raw HR array */}
                {/* <div className="space-y-6 lg:col-span-2">
-                 <SignalCharts data={data.timeseries} />
+                 <SignalCharts data={timeseries} />
                </div> */}
                
-               {/* SLEEP ARCHITECTURE: Now spans wider to fill space, accepts metrics object */}
+               {/* SLEEP ARCHITECTURE: Spans wider, accepts Zustand state */}
                <div className="space-y-6 lg:col-span-3">
-                 <SleepArchitecture metrics={data.metrics} timeseries={data.timeseries} />
-
+                 <SleepArchitecture metrics={metrics} timeseries={timeseries} />
                  {/* <AnomalyLog anomalies={data.anomalies} /> */}
                </div>
             </div>
@@ -144,7 +152,7 @@ export default function DashboardPage() {
             </div> */}
             
             <div className="flex items-center justify-between pt-4 mt-8 border-t text-xs text-slate-400 border-slate-200">
-              <p>Analysis powered by TensorFlow Keras</p>
+              <p>DSP & Analysis powered by TensorFlow Keras</p>
               <p>Practitioner: <span className="font-bold text-blue-600">{practitioner?.email}</span></p>
             </div>
           </div>

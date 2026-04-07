@@ -2,45 +2,37 @@
 
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileType, AlertCircle, Loader2 } from 'lucide-react';
-// Replaced local data processor with the new API service
-import { uploadCsvForAnalysis } from '../lib/axios'; // Adjust path if your axios.ts is elsewhere
-import { DashboardData } from '../types';
+import { uploadCsvForAnalysis } from '../lib/axios'; 
+import { useSleepStore } from '../store/sleepStore'; // Import the global store
 
-interface FileUploadProps {
-    onDataLoaded: (data: DashboardData) => void;
-}
-
-export default function FileUpload({ onDataLoaded }: FileUploadProps) {
+export default function FileUpload() {
+    const { setAnalysisData, setAnalyzing, isAnalyzing } = useSleepStore();
     const [isDragging, setIsDragging] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = async (file: File) => {
         setError(null);
 
-        // 1. Strict Input Validation
         if (!file) return;
         if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
             setError('Strict Error: Invalid file format. Only CSV files are accepted.');
             return;
         }
 
-        // 2. Async Processing Trigger (Hitting the ML Backend)
-        setIsLoading(true);
+        // Trigger global loading state
+        setAnalyzing(true);
         try {
             const mlResult = await uploadCsvForAnalysis(file);
             
-            // 3. Hand off the ML data to parent component
-            // Note: Ensure your `DashboardData` type in '../types' is updated to match 
-            // the { metrics: {...}, timeseries: [...] } format coming from Python.
-            onDataLoaded(mlResult);
+            // Push directly to Zustand. Ensure your axios response maps to these keys.
+            setAnalysisData(mlResult.metrics, mlResult.timeseries);
             
         } catch (err: any) {
-            setError(err.message || 'Data pipeline failure. Ensure the CSV contains an HR column.');
+            setError(err.message || 'Data pipeline failure. Ensure it is a valid raw radar CSV.');
+            // If it fails, we must turn off the loading state manually
+            setAnalyzing(false); 
         } finally {
-            setIsLoading(false);
-            // Reset input so the same file can be uploaded again if needed
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
@@ -69,12 +61,12 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onClick={() => !isLoading && fileInputRef.current?.click()}
+                onClick={() => !isAnalyzing && fileInputRef.current?.click()}
                 className={`
                     relative flex flex-col items-center justify-center w-full h-64 p-6 
                     border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
                     ${isDragging ? 'border-blue-500 bg-blue-50/50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}
-                    ${isLoading ? 'opacity-75 pointer-events-none' : ''}
+                    ${isAnalyzing ? 'opacity-75 pointer-events-none' : ''}
                 `}
             >
                 <input
@@ -85,10 +77,10 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                     onChange={(e) => e.target.files && handleFile(e.target.files[0])}
                 />
                 
-                {isLoading ? (
+                {isAnalyzing ? (
                     <div className="flex flex-col items-center text-blue-600">
                         <Loader2 className="w-12 h-12 mb-4 animate-spin" />
-                        <p className="text-sm font-semibold">Running ML Inference...</p>
+                        <p className="text-sm font-semibold">Extracting Signal & Running ML Inference...</p>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center text-gray-500">
@@ -97,7 +89,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                             Click to upload or drag and drop
                         </p>
                         <p className="text-xs text-gray-500 flex items-center gap-1">
-                            <FileType className="w-3 h-3" /> Heart Rate CSV files only
+                            <FileType className="w-3 h-3" /> Raw Radar CSV files only
                         </p>
                     </div>
                 )}
